@@ -1,4 +1,9 @@
-import { SoilMoistureLevel, TempHumidityLevel, MESSAGE_REQUESTS, Action } from "./types"
+import {
+  SoilMoistureLevel,
+  TempHumidityLevel,
+  MESSAGE_REQUESTS,
+  Action,
+} from "./types"
 import { getSoilMoisture } from "./utilities"
 import { WorkerThread } from "./worker"
 
@@ -7,10 +12,8 @@ class WebSocketClient {
   BASE_URL = process.env.HOSTNAME ?? "127.0.0.1"
   lastTempHumidityReading: TempHumidityLevel
   lastSoilMoistureReading: SoilMoistureLevel
-  interval: Timer
-  WAIT_TEN_MINUTES = 10
-  WAIT_FIVE_MINUTES = 5
-  WAIT_THIRTY_SECONDS = 30
+  cycleInterval: Timer
+  soilReadingInterval: Timer
   thread: WorkerThread
 
   constructor(id: string) {
@@ -39,8 +42,8 @@ class WebSocketClient {
   }
 
   HandleOnClose = () => {
-    if (this.interval) {
-      clearInterval(this.interval)
+    if (this.cycleInterval) {
+      clearInterval(this.cycleInterval)
     }
   }
 
@@ -49,13 +52,15 @@ class WebSocketClient {
   }
 
   async #startMonitoring() {
-    this.lastSoilMoistureReading = await getSoilMoisture()
-    this.send(JSON.stringify(this.lastSoilMoistureReading))
+    this.soilReadingInterval = setInterval(async () => {
+      this.lastSoilMoistureReading = await getSoilMoisture()
+      this.send(JSON.stringify(this.lastSoilMoistureReading))
+    }, 5000)
 
     this.thread.worker.postMessage({ action: "START" })
     this.thread.status = true
 
-    this.interval = setInterval(() => {
+    this.cycleInterval = setInterval(() => {
       this.send(JSON.stringify(this.lastSoilMoistureReading))
       if (!this.thread.status) {
         this.lastSoilMoistureReading = this.thread.data
